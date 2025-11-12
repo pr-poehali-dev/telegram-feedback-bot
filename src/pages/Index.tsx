@@ -29,6 +29,7 @@ type Bot = {
 const BOT_MANAGER_URL = 'https://functions.poehali.dev/7a54001b-4010-4175-9428-a7e922d7da84';
 const BOT_MESSAGES_URL = 'https://functions.poehali.dev/a23d9b25-8628-485e-893e-7fb977d07046';
 const WEBHOOK_URL = 'https://functions.poehali.dev/af40ed3c-a51d-4f3f-ae16-ef69f32d3a02';
+const BOT_CONSTRUCTOR_WEBHOOK = 'https://functions.poehali.dev/79eb3c45-12ba-4c25-bf0a-00e946f51c3b';
 
 const Index = () => {
   const [screen, setScreen] = useState<Screen>('home');
@@ -231,6 +232,32 @@ const Index = () => {
           <p className="text-muted-foreground">Создай бота для обратной связи за 3 минуты</p>
         </div>
 
+        <Card className="border-2 border-accent/20 shadow-lg mb-6 bg-gradient-to-r from-accent/5 to-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Icon name="Sparkles" size={24} className="text-accent" />
+              Управление через Telegram
+            </CardTitle>
+            <CardDescription>
+              Создавайте и управляйте ботами прямо из Telegram! Подключите главный бот-конструктор:
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-background p-4 rounded-lg mb-3">
+              <p className="text-sm mb-2">1️⃣ Создайте главный бот через @BotFather</p>
+              <p className="text-sm mb-2">2️⃣ Скопируйте токен и настройте webhook:</p>
+              <code className="text-xs bg-muted p-2 rounded block break-all">
+                {BOT_CONSTRUCTOR_WEBHOOK}?bot_token=ВАШ_ТОКЕН
+              </code>
+              <p className="text-sm mt-2">3️⃣ Запустите бота и управляйте через /start</p>
+            </div>
+            <Badge className="bg-accent text-white">
+              <Icon name="MessageCircle" size={14} className="mr-1" />
+              Все функции доступны в Telegram
+            </Badge>
+          </CardContent>
+        </Card>
+
         {screen === 'home' && (
           <div className="space-y-4 animate-slide-up">
             {!currentBot ? (
@@ -238,7 +265,7 @@ const Index = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Icon name="Rocket" size={24} className="text-primary" />
-                    Начните с создания бота
+                    Или создайте бота через веб-интерфейс
                   </CardTitle>
                   <CardDescription>Подключите бота через Telegram BotFather</CardDescription>
                 </CardHeader>
