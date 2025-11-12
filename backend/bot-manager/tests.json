@@ -1,0 +1,25 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS request for CORS",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": "",
+      "bodyMatcher": "exact"
+    },
+    {
+      "name": "GET bots list",
+      "method": "GET",
+      "path": "/",
+      "headers": {
+        "X-User-Id": "test_user_123"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "bots": "array"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

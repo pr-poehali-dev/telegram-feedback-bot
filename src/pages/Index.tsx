@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,57 +10,215 @@ import { useToast } from '@/hooks/use-toast';
 
 type Screen = 'home' | 'create' | 'settings' | 'messages';
 type Message = {
-  id: string;
+  id: number;
   username: string;
-  text: string;
-  date: string;
+  message_text: string;
+  created_at: string;
+  first_name?: string;
+  last_name?: string;
 };
+
+type Bot = {
+  id: number;
+  bot_username: string;
+  welcome_text: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+const BOT_MANAGER_URL = 'https://functions.poehali.dev/7a54001b-4010-4175-9428-a7e922d7da84';
+const BOT_MESSAGES_URL = 'https://functions.poehali.dev/a23d9b25-8628-485e-893e-7fb977d07046';
+const WEBHOOK_URL = 'https://functions.poehali.dev/af40ed3c-a51d-4f3f-ae16-ef69f32d3a02';
 
 const Index = () => {
   const [screen, setScreen] = useState<Screen>('home');
   const [botToken, setBotToken] = useState('');
-  const [botConnected, setBotConnected] = useState(false);
+  const [currentBot, setCurrentBot] = useState<Bot | null>(null);
   const [welcomeText, setWelcomeText] = useState('Привет! Напиши мне сообщение, и я передам его владельцу.');
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', username: 'user123', text: 'Здравствуйте! У меня вопрос по вашему продукту', date: '2025-11-12 14:30' },
-    { id: '2', username: 'alex_m', text: 'Когда будет следующая поставка?', date: '2025-11-12 15:45' },
-    { id: '3', username: 'maria_k', text: 'Спасибо за быстрый ответ!', date: '2025-11-12 16:20' },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [userId] = useState(() => {
+    let id = localStorage.getItem('userId');
+    if (!id) {
+      id = 'user_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('userId', id);
+    }
+    return id;
+  });
   const { toast } = useToast();
 
-  const handleConnectBot = () => {
-    if (botToken.length > 10) {
-      setBotConnected(true);
-      setScreen('home');
-      toast({
-        title: '🎉 Бот подключен!',
-        description: 'Ваш бот успешно активирован и готов к работе',
+  useEffect(() => {
+    loadBotData();
+  }, []);
+
+  useEffect(() => {
+    if (currentBot) {
+      loadMessages();
+    }
+  }, [currentBot]);
+
+  const loadBotData = async () => {
+    try {
+      const response = await fetch(BOT_MANAGER_URL, {
+        method: 'GET',
+        headers: {
+          'X-User-Id': userId,
+        },
       });
-    } else {
+      const data = await response.json();
+      if (data.bots && data.bots.length > 0) {
+        setCurrentBot(data.bots[0]);
+        setWelcomeText(data.bots[0].welcome_text);
+      }
+    } catch (error) {
+      console.error('Error loading bot:', error);
+    }
+  };
+
+  const loadMessages = async () => {
+    if (!currentBot) return;
+    try {
+      const response = await fetch(`${BOT_MESSAGES_URL}?bot_id=${currentBot.id}`, {
+        method: 'GET',
+        headers: {
+          'X-User-Id': userId,
+        },
+      });
+      const data = await response.json();
+      if (data.messages) {
+        setMessages(data.messages);
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error);
+    }
+  };
+
+  const handleConnectBot = async () => {
+    if (botToken.length < 10) {
       toast({
         title: '❌ Ошибка',
         description: 'Введите корректный токен бота',
         variant: 'destructive',
       });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(BOT_MANAGER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId,
+        },
+        body: JSON.stringify({
+          bot_token: botToken,
+          welcome_text: welcomeText,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setCurrentBot(data.bot);
+        
+        const webhookUrl = `${WEBHOOK_URL}?bot_token=${botToken}`;
+        await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: webhookUrl }),
+        });
+
+        setScreen('home');
+        setBotToken('');
+        toast({
+          title: '🎉 Бот подключен!',
+          description: 'Ваш бот успешно активирован и готов к работе',
+        });
+      } else {
+        toast({
+          title: '❌ Ошибка',
+          description: data.error || 'Не удалось подключить бота',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: '❌ Ошибка',
+        description: 'Не удалось подключить бота',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDisconnectBot = () => {
-    setBotConnected(false);
-    setBotToken('');
-    setScreen('home');
-    toast({
-      title: 'Бот отвязан',
-      description: 'Вы можете подключить новый бот',
-    });
+  const handleDisconnectBot = async () => {
+    if (!currentBot) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${BOT_MANAGER_URL}?bot_id=${currentBot.id}`, {
+        method: 'DELETE',
+        headers: {
+          'X-User-Id': userId,
+        },
+      });
+
+      if (response.ok) {
+        setCurrentBot(null);
+        setMessages([]);
+        setScreen('home');
+        toast({
+          title: 'Бот отвязан',
+          description: 'Вы можете подключить новый бот',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: '❌ Ошибка',
+        description: 'Не удалось отвязать бота',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSaveSettings = () => {
-    toast({
-      title: '✅ Настройки сохранены',
-      description: 'Текст приветствия обновлен',
-    });
-    setScreen('home');
+  const handleSaveSettings = async () => {
+    if (!currentBot) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(BOT_MANAGER_URL, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId,
+        },
+        body: JSON.stringify({
+          bot_id: currentBot.id,
+          welcome_text: welcomeText,
+        }),
+      });
+
+      if (response.ok) {
+        setCurrentBot({ ...currentBot, welcome_text: welcomeText });
+        toast({
+          title: '✅ Настройки сохранены',
+          description: 'Текст приветствия обновлен',
+        });
+        setScreen('home');
+      }
+    } catch (error) {
+      toast({
+        title: '❌ Ошибка',
+        description: 'Не удалось сохранить настройки',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -75,7 +233,7 @@ const Index = () => {
 
         {screen === 'home' && (
           <div className="space-y-4 animate-slide-up">
-            {!botConnected ? (
+            {!currentBot ? (
               <Card className="border-2 border-primary/20 shadow-lg hover:shadow-xl transition-shadow">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -96,16 +254,18 @@ const Index = () => {
                 <Card className="border-2 border-primary/20 shadow-lg">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <Icon name="CheckCircle2" size={24} className="text-primary" />
-                        Бот активен
-                      </CardTitle>
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <Icon name="CheckCircle2" size={24} className="text-primary" />
+                          Бот @{currentBot.bot_username}
+                        </CardTitle>
+                        <CardDescription>Выберите действие для управления ботом</CardDescription>
+                      </div>
                       <Badge className="bg-primary text-white">
                         <Icon name="Zap" size={14} className="mr-1" />
                         Работает
                       </Badge>
                     </div>
-                    <CardDescription>Выберите действие для управления ботом</CardDescription>
                   </CardHeader>
                 </Card>
 
@@ -236,9 +396,9 @@ const Index = () => {
                     onChange={(e) => setBotToken(e.target.value)}
                     className="font-mono"
                   />
-                  <Button onClick={handleConnectBot} size="lg" className="w-full">
+                  <Button onClick={handleConnectBot} size="lg" className="w-full" disabled={loading}>
                     <Icon name="Link" size={20} className="mr-2" />
-                    Подключить бота
+                    {loading ? 'Подключение...' : 'Подключить бота'}
                   </Button>
                 </div>
               </CardContent>
@@ -275,9 +435,9 @@ const Index = () => {
                   </p>
                 </div>
 
-                <Button onClick={handleSaveSettings} size="lg" className="w-full bg-secondary hover:bg-secondary/90">
+                <Button onClick={handleSaveSettings} size="lg" className="w-full bg-secondary hover:bg-secondary/90" disabled={loading}>
                   <Icon name="Save" size={20} className="mr-2" />
-                  Сохранить изменения
+                  {loading ? 'Сохранение...' : 'Сохранить изменения'}
                 </Button>
               </CardContent>
             </Card>
@@ -316,16 +476,16 @@ const Index = () => {
                               <Icon name="User" size={20} className="text-primary" />
                             </div>
                             <div>
-                              <p className="font-semibold">@{message.username}</p>
-                              <p className="text-xs text-muted-foreground">{message.date}</p>
+                              <p className="font-semibold">
+                                {message.username ? `@${message.username}` : `${message.first_name || ''} ${message.last_name || ''}`.trim() || 'Пользователь'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(message.created_at).toLocaleString('ru-RU')}
+                              </p>
                             </div>
                           </div>
-                          <Button size="sm" variant="outline">
-                            <Icon name="Reply" size={16} className="mr-1" />
-                            Ответить
-                          </Button>
                         </div>
-                        <p className="text-sm bg-background p-3 rounded-lg">{message.text}</p>
+                        <p className="text-sm bg-background p-3 rounded-lg">{message.message_text}</p>
                       </CardContent>
                     </Card>
                   ))

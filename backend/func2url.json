@@ -1,0 +1,5 @@
+{
+  "telegram-webhook": "https://functions.poehali.dev/af40ed3c-a51d-4f3f-ae16-ef69f32d3a02",
+  "bot-manager": "https://functions.poehali.dev/7a54001b-4010-4175-9428-a7e922d7da84",
+  "bot-messages": "https://functions.poehali.dev/a23d9b25-8628-485e-893e-7fb977d07046"
+}
